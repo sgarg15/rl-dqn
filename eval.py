@@ -1,16 +1,26 @@
+import argparse
+
 import gymnasium as gym
 import torch
 
 from dqn import DQN
 
 
-env = gym.make("CartPole-v1", render_mode="human")
+# Take args from command line for env name and model path
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--env", type=str, default="CartPole-v1")
+parser.add_argument("--model", type=str, default="dqn_cartpole.pt")
+args = parser.parse_args()
+
+env = gym.make(args.env, render_mode="human")
 
 state_dim = env.observation_space.shape[0]
 action_dim = env.action_space.n
 
 policy_net = DQN(state_dim, action_dim)
-policy_net.load_state_dict(torch.load("dqn_cartpole.pt"))
+policy_net.load_state_dict(torch.load(args.model))
 policy_net.eval()
 
 state, info = env.reset()
