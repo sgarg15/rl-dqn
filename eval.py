@@ -1,46 +1,48 @@
 import argparse
 
 import gymnasium as gym
-import torch
 
-from dqn import DQN
-
-
-# Take args from command line for env name and model path
+from agent import DQNAgent
+from disturbance_wrapper import DisturbanceWrapper
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--env", type=str, default="CartPole-v1")
 parser.add_argument("--model", type=str, default="dqn_cartpole.pt")
+parser.add_argument("--disturbance", action="store_true", help="Enable live disturbances via left/right arrow keys")
+parser.add_argument("--nudge", type=float, default=0.5, help="Disturbance strength (default: 0.5)")
+parser.add_argument("--impulse", action="store_true", help="Single impulse per keypress instead of hold")
 args = parser.parse_args()
 
 env = gym.make(args.env, render_mode="human")
+if args.disturbance:
+    env = DisturbanceWrapper(env, strength=args.nudge, impulse=args.impulse)
 
 state_dim = env.observation_space.shape[0]
 action_dim = env.action_space.n
 
-policy_net = DQN(state_dim, action_dim)
-policy_net.load_state_dict(torch.load(args.model))
-policy_net.eval()
+agent = DQNAgent(state_dim=state_dim, action_dim=action_dim)
+agent.load(args.model)
 
-state, info = env.reset()
-done = False
-total_reward = 0
+episode = 0
 
-while not done:
-    state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+try:
+    while True:
+        state, _ = env.reset()
+        done = False
+        total_reward = 0
+        episode += 1
 
-    with torch.no_grad():
-        q_values = policy_net(state_tensor)
+        while not done:
+            action = agent.select_action(state, epsilon=0.0)
+            state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
+            total_reward += reward
 
-    action = q_values.argmax(dim=1).item()
+        print(f"Episode {episode} reward: {total_reward:.1f}")
 
-    next_state, reward, terminated, truncated, info = env.step(action)
+except KeyboardInterrupt:
+    pass
 
-    done = terminated or truncated
-    state = next_state
-    total_reward += reward
-
-print("Evaluation reward:", total_reward)
-
-env.close()
+finally:
+    env.close()
