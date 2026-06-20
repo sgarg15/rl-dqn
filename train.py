@@ -1,39 +1,61 @@
 import gymnasium as gym
-import numpy as np
+import matplotlib.pyplot as plt
 
 from agent import DQNAgent
 
-# env = gym.make("CartPole-v1")
-env = gym.make("LunarLander-v3")
+# --- Config ---
+ENV_NAME        = "LunarLander-v3"   # "CartPole-v1" or "LunarLander-v3"
 
-# Reset the environment to get the initial state and info
+CONFIGS = {
+    "CartPole-v1": dict(
+        model_path         = "dqn_cartpole.pt",
+        num_episodes       = 300,
+        epsilon_decay      = 200,
+        target_update_freq = 500,
+        learning_rate      = 1e-3,
+        gamma              = 0.99,
+        batch_size         = 64,
+        replay_capacity    = 10_000,
+    ),
+    "LunarLander-v3": dict(
+        model_path         = "dqn_lunarlander.pt",
+        num_episodes       = 500,
+        epsilon_decay      = 200,
+        target_update_freq = 500,
+        learning_rate      = 1e-3,
+        gamma              = 0.99,
+        batch_size         = 64,
+        replay_capacity    = 10_000,
+    ),
+}
+
+cfg = CONFIGS[ENV_NAME]
+
+epsilon_start = 1.0
+epsilon_end   = 0.05
+# ---------------
+
+env = gym.make(ENV_NAME)
 state, info = env.reset()
 
-state_dim = env.observation_space.shape[0]
+state_dim  = env.observation_space.shape[0]
 action_dim = env.action_space.n
 
 agent = DQNAgent(
     state_dim=state_dim,
     action_dim=action_dim,
-    learning_rate=1e-3,
-    gamma=0.99,
-    batch_size=64,
-    replay_buffer_capacity=10_000,
+    learning_rate=cfg["learning_rate"],
+    gamma=cfg["gamma"],
+    batch_size=cfg["batch_size"],
+    replay_buffer_capacity=cfg["replay_capacity"],
 )
 
-num_episodes = 500
-
-epsilon_start = 1.0
-epsilon_end = 0.05
-epsilon_decay = 200
-
-target_update_freq = 500
-global_step = 0
-
 episode_rewards = []
-losses = []
+losses          = []
+best_avg50      = float("-inf")
+global_step     = 0
 
-for episode in range(num_episodes):
+for episode in range(cfg["num_episodes"]):
 
     state, info = env.reset()
     episode_reward = 0
@@ -41,20 +63,15 @@ for episode in range(num_episodes):
 
     while not done:
         # Compute epsilon for the current step using exponential decay
-        epsilon = max(epsilon_end, epsilon_start - (episode / epsilon_decay))
-
-        action = agent.select_action(state, epsilon)
+        epsilon = max(epsilon_end, epsilon_start - (episode / cfg["epsilon_decay"]))
+        action  = agent.select_action(state, epsilon)
 
         next_state, reward, terminated, truncated, info = env.step(action)
-
-        # Terminated is triggered when the pole angle is more than +- 12 deg or the cart moves beyond +- 2.4 units from the center
-        # Truncated triggered when the time limit is reached
         done = terminated or truncated
 
         agent.store_transition(state, action, reward, next_state, done)
 
         loss = agent.train_step()
-
         if loss is not None:
             losses.append(loss)
 
@@ -62,34 +79,57 @@ for episode in range(num_episodes):
         episode_reward += reward
         global_step += 1
 
-        if global_step % target_update_freq == 0:
+        if global_step % cfg["target_update_freq"] == 0:
             agent.update_target_network()
 
     episode_rewards.append(episode_reward)
+
     if episode % 10 == 0:
-        avg_reward_10 = sum(episode_rewards[-10:]) / len(episode_rewards[-10:])
-        avg_reward_50 = sum(episode_rewards[-50:]) / len(episode_rewards[-50:])
-            
+        avg10 = sum(episode_rewards[-10:]) / len(episode_rewards[-10:])
+        avg50 = sum(episode_rewards[-50:]) / len(episode_rewards[-50:])
+
         print(
             f"Episode {episode}, ",
-            f"Reward: {episode_reward}, ",
-            f"Average Reward (last 10): {avg_reward_10:.2f}, ",
-            f"Average Reward (last 50): {avg_reward_50:.2f}, ",
+            f"Reward: {episode_reward:.1f}, ",
+            f"Avg10: {avg10:.1f}, ",
+            f"Avg50: {avg50:.1f}, ",
             f"Epsilon: {epsilon:.2f}, ",
-            f"Replay Buffer Size: {len(agent.replay_buffer)}",
+            f"Buffer: {len(agent.replay_buffer)}",
         )
 
-if env.spec.id == "LunarLander-v3":
-    file_name = "dqn_lunarlander.pt"
-elif env.spec.id == "CartPole-v1":
-    file_name = "dqn_cartpole.pt"
-else :
-    file_name = "dqn_model.pt"
-    
-agent.save(file_name)
-print(f"Model saved as {file_name}")
+        if avg50 > best_avg50:
+            best_avg50 = avg50
+            agent.save(cfg["model_path"])
+            print(f"  -> Checkpoint saved (best Avg50: {best_avg50:.1f})")
 
 env.close()
+print(f"Training complete. Best Avg50: {best_avg50:.1f}")
 
+# --- Plotting ---
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
 
-print("Final Replay Buffer Size:", len(agent.replay_buffer))
+ax1.plot(episode_rewards, alpha=0.4, label="Episode reward")
+if len(episode_rewards) >= 10:
+    rolling10 = [
+        sum(episode_rewards[max(0, i-9):i+1]) / min(i+1, 10)
+        for i in range(len(episode_rewards))
+    ]
+    rolling50 = [
+        sum(episode_rewards[max(0, i-49):i+1]) / min(i+1, 50)
+        for i in range(len(episode_rewards))
+    ]
+    ax1.plot(rolling10, label="Avg10")
+    ax1.plot(rolling50, label="Avg50")
+ax1.set_xlabel("Episode")
+ax1.set_ylabel("Reward")
+ax1.set_title(f"{ENV_NAME} — Training Rewards")
+ax1.legend()
+
+ax2.plot(losses, alpha=0.5)
+ax2.set_xlabel("Training step")
+ax2.set_ylabel("Loss")
+ax2.set_title("TD Loss")
+
+plt.tight_layout()
+plt.savefig("training_curve.png")
+plt.show()
