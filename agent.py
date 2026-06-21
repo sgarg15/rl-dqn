@@ -64,10 +64,11 @@ class DQNAgent:
             max_next_q = self.target_net(next_states_tensor).max(dim=1)[0].unsqueeze(1)
             target_q = rewards_tensor + (self.gamma * max_next_q * (1 - dones_tensor))
 
-        loss = F.mse_loss(current_q, target_q)
+        loss = F.huber_loss(current_q, target_q)
 
         self.optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), max_norm=10.0)  # Gradient clipping to prevent exploding gradients
         self.optimizer.step()
 
         return loss.item()
@@ -81,4 +82,3 @@ class DQNAgent:
     def load(self, path):
         self.policy_net.load_state_dict(torch.load(path, map_location=self.device))
         self.target_net.load_state_dict(self.policy_net.state_dict())
-        

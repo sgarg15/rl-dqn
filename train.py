@@ -5,12 +5,23 @@ from agent import DQNAgent
 
 # --- Config ---
 ENV_NAME        = "LunarLander-v3"   # "CartPole-v1" or "LunarLander-v3"
+# ENV_NAME        = "CartPole-v1"   # "CartPole-v1" or "LunarLander-v3"
 
 CONFIGS = {
+    "MeaningOfArgs": dict(
+        model_path         = "Path to save the trained model (e.g., dqn_cartpole.pt)",
+        num_episodes       = "Total number of training episodes (e.g., 500)",
+        epsilon_decay      = "Number of episodes over which epsilon decays (e.g., 500)",
+        target_update_freq = "Number of steps between target network updates (e.g., 500)",
+        learning_rate      = "Learning rate for the optimizer (e.g., 1e-3), it controls how much the model updates its parameters in response to the estimated error each time the model weights are updated.",
+        gamma              = "Discount factor for future rewards (e.g., 0.99)",
+        batch_size         = "Batch size for training (e.g., 64)",
+        replay_capacity    = "Maximum capacity of the replay buffer (e.g., 10,000)",
+    ),
     "CartPole-v1": dict(
-        model_path         = "dqn_cartpole.pt",
-        num_episodes       = 300,
-        epsilon_decay      = 200,
+        model_path         = "checkpoints/dqn_cartpole.pt",
+        num_episodes       = 500,
+        epsilon_decay      = 400,
         target_update_freq = 500,
         learning_rate      = 1e-3,
         gamma              = 0.99,
@@ -18,10 +29,10 @@ CONFIGS = {
         replay_capacity    = 10_000,
     ),
     "LunarLander-v3": dict(
-        model_path         = "dqn_lunarlander.pt",
+        model_path         = "checkpoints/dqn_lunarlander.pt",
         num_episodes       = 500,
-        epsilon_decay      = 200,
-        target_update_freq = 500,
+        epsilon_decay      = 400,
+        target_update_freq = 800,
         learning_rate      = 1e-3,
         gamma              = 0.99,
         batch_size         = 64,
@@ -67,6 +78,10 @@ for episode in range(cfg["num_episodes"]):
         action  = agent.select_action(state, epsilon)
 
         next_state, reward, terminated, truncated, info = env.step(action)
+
+        # Shaping reward for CartPole to encourage keeping the pole centered
+        if ENV_NAME == "CartPole-v1":
+            reward -= 0.5 * abs(next_state[0]) / 2.4
         done = terminated or truncated
 
         agent.store_transition(state, action, reward, next_state, done)
@@ -131,5 +146,5 @@ ax2.set_ylabel("Loss")
 ax2.set_title("TD Loss")
 
 plt.tight_layout()
-plt.savefig("training_curve.png")
+plt.savefig(f"plots/training_curve_{ENV_NAME}_{best_avg50:.1f}.png")
 plt.show()

@@ -57,11 +57,11 @@ Checkpoints are saved only when the 50-episode rolling average improves. Trainin
 ### Evaluation
 
 ```bash
-python eval.py --env CartPole-v1 --model dqn_cartpole.pt
-python eval.py --env LunarLander-v3 --model dqn_lunarlander.pt
+python eval.py --env CartPole-v1 --model checkpoints/dqn_cartpole.pt
+python eval.py --env LunarLander-v3 --model checkpoints/dqn_lunarlander.pt
 
 # With live disturbances (arrow keys nudge the environment in real time)
-python eval.py --env LunarLander-v3 --model dqn_lunarlander.pt --disturbance
+python eval.py --env LunarLander-v3 --model checkpoints/dqn_lunarlander.pt --disturbance
 ```
 
 ### Key learnings
@@ -73,3 +73,5 @@ python eval.py --env LunarLander-v3 --model dqn_lunarlander.pt --disturbance
 **Policy net vs target net.** Using the policy net to compute both the current Q-values and the Bellman targets creates a feedback loop improving the network shifts the targets, which shifts the network again. The frozen target net breaks this cycle. Without it, training is unstable.
 
 **Hyperparameters heavily affect convergence.** With the current setup, training too long causes performance to collapse. Two causes: (1) epsilon decays to its floor early and the agent stops exploring, so it can't recover from a bad patch; (2) MSE loss with no gradient clipping allows a single bad batch to cause catastrophic weight updates, visible as a sharp loss spike followed by reward collapse. Fixes: Huber loss, gradient clipping, larger replay buffer, slower epsilon decay.
+
+**Huber loss + gradient clipping made a dramatic difference.** Switching from MSE to Huber loss and adding gradient norm clipping (`max_norm=10`) produced a large improvement in average reward during training. MSE loss has no ceiling meaning a single outlier transition (large TD error) causes an enormous gradient update that can destroy previously learned weights. Huber loss is quadratic for small errors but linear for large ones, capping the influence of outliers. Gradient clipping adds a second safety net, ensuring no single update moves the weights too far regardless of the loss magnitude. Together they stabilized the training curve and prevented the reward collapse seen in earlier runs.

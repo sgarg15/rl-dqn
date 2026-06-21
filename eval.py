@@ -23,6 +23,8 @@ action_dim = env.action_space.n
 
 agent = DQNAgent(state_dim=state_dim, action_dim=action_dim)
 agent.load(args.model)
+agent.policy_net.eval()
+print(f"Loaded {args.model} | state_dim={state_dim} action_dim={action_dim}")
 
 episode = 0
 
