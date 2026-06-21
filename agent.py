@@ -64,11 +64,36 @@ class DQNAgent:
             max_next_q = self.target_net(next_states_tensor).max(dim=1)[0].unsqueeze(1)
             target_q = rewards_tensor + (self.gamma * max_next_q * (1 - dones_tensor))
 
+        print(f"Current Q-values: {current_q}")
+        print(f"Target Q-values: {target_q}")
+
         loss = F.huber_loss(current_q, target_q)
 
         self.optimizer.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), max_norm=10.0)  # Gradient clipping to prevent exploding gradients
+        self.optimizer.step()
+
+        return loss.item()
+
+    def train_step_online(self, state, action, reward, next_state, done):
+        state_tensor      = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
+        action_tensor     = torch.tensor([[action]], dtype=torch.int64).to(self.device)
+        reward_tensor     = torch.tensor([[reward]], dtype=torch.float32).to(self.device)
+        next_state_tensor = torch.tensor(next_state, dtype=torch.float32).unsqueeze(0).to(self.device)
+        done_tensor       = torch.tensor([[done]], dtype=torch.float32).to(self.device)
+
+        current_q = self.policy_net(state_tensor).gather(1, action_tensor)
+
+        with torch.no_grad():
+            max_next_q = self.target_net(next_state_tensor).max(dim=1)[0].unsqueeze(1)
+            target_q   = reward_tensor + (self.gamma * max_next_q * (1 - done_tensor))
+
+        loss = F.huber_loss(current_q, target_q)
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), max_norm=10.0)
         self.optimizer.step()
 
         return loss.item()

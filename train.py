@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 from agent import DQNAgent
 
 # --- Config ---
-ENV_NAME        = "LunarLander-v3"   # "CartPole-v1" or "LunarLander-v3"
-# ENV_NAME        = "CartPole-v1"   # "CartPole-v1" or "LunarLander-v3"
+# ENV_NAME        = "LunarLander-v3"   # "CartPole-v1" or "LunarLander-v3"
+ENV_NAME        = "CartPole-v1"   # "CartPole-v1" or "LunarLander-v3"
 
 CONFIGS = {
     "MeaningOfArgs": dict(
@@ -27,6 +27,7 @@ CONFIGS = {
         gamma              = 0.99,
         batch_size         = 64,
         replay_capacity    = 10_000,
+        use_replay_buffer  = True,
     ),
     "LunarLander-v3": dict(
         model_path         = "checkpoints/dqn_lunarlander.pt",
@@ -37,6 +38,7 @@ CONFIGS = {
         gamma              = 0.99,
         batch_size         = 64,
         replay_capacity    = 10_000,
+        use_replay_buffer  = True,
     ),
 }
 
@@ -84,9 +86,12 @@ for episode in range(cfg["num_episodes"]):
             reward -= 0.5 * abs(next_state[0]) / 2.4
         done = terminated or truncated
 
-        agent.store_transition(state, action, reward, next_state, done)
+        if cfg["use_replay_buffer"]:
+            agent.store_transition(state, action, reward, next_state, done)
+            loss = agent.train_step()
+        else:
+            loss = agent.train_step_online(state, action, reward, next_state, done)
 
-        loss = agent.train_step()
         if loss is not None:
             losses.append(loss)
 
@@ -103,13 +108,14 @@ for episode in range(cfg["num_episodes"]):
         avg10 = sum(episode_rewards[-10:]) / len(episode_rewards[-10:])
         avg50 = sum(episode_rewards[-50:]) / len(episode_rewards[-50:])
 
+        buffer_str = f"Buffer: {len(agent.replay_buffer)}" if cfg["use_replay_buffer"] else "Buffer: off"
         print(
             f"Episode {episode}, ",
             f"Reward: {episode_reward:.1f}, ",
             f"Avg10: {avg10:.1f}, ",
             f"Avg50: {avg50:.1f}, ",
             f"Epsilon: {epsilon:.2f}, ",
-            f"Buffer: {len(agent.replay_buffer)}",
+            buffer_str,
         )
 
         if avg50 > best_avg50:
