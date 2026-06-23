@@ -64,9 +64,6 @@ class DQNAgent:
             max_next_q = self.target_net(next_states_tensor).max(dim=1)[0].unsqueeze(1)
             target_q = rewards_tensor + (self.gamma * max_next_q * (1 - dones_tensor))
 
-        print(f"Current Q-values: {current_q}")
-        print(f"Target Q-values: {target_q}")
-
         loss = F.huber_loss(current_q, target_q)
 
         self.optimizer.zero_grad()
